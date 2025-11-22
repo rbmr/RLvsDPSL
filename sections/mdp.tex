@@ -1,0 +1,98 @@
+\section{MDP Derivation}
+\label{sec:mdp}
+
+We can formulate the trading problem as a Markov Decision Process (MDP). An MDP is formally defined by a 5-tuple $(\mathcal{S},\mathcal{A},\mathcal{R},\mathcal{P},\gamma)$, representing the state space, action space, reward function, transition dynamics, and discount factor, respectively. The agent interacts with the environment (the market) in discrete time steps, which correspond to the timeframes $t$ of our problem.
+
+\subsection{Goal equivalence}
+
+The MDP must be formulated appropriately such that the agents goal is the exactly the goal described in \ref{sec:goal}. For this purpose the action space $\mathcal{A}$ and reward function $\mathcal{R}$ must possess the following two properties.
+
+\paragraph{Equity independence} The agent's learned policy should be applicable regardless of the initial or current account equity. This means that for every action $a_t \in \mathcal{A}$, the corresponding reward $r_t$ must be the same regardless of equity. Whether this property is met depends on the combination of action space and reward function.
+
+\paragraph{Goal alignment} The reward function must incentivize the maximization of the final equity $e_{T-1,c}$. This means that to maximize the total return $G_0=\sum_{t=0}^{T-1}{r_t}$, should be equivalent to maximizing the final equity. To prove this is the case we need to show that for any two policies $\pi_A$ and $\pi_B$, that $\pi_A$ has a larger return than $\pi_B$, if and only if $\pi_A$ has a larger final equity than $\pi_B$.
+$$
+G_0^A > G_0^B \iff e_{T-1,c}^A > e^B_{T-1,c}
+$$ 
+
+\subsection{Action space}
+
+\subsubsection{Target positions}
+
+The agent's output, a continuous value $a_t \in \mathcal{A}$, must be able to be translated into a concrete trading order $\Delta S_t$. For effective learning, particularly with neural networks, it is standard practice for this output to be normalized, typically within a bounded space such as $\mathcal{A}=[-1,1]$. The core design choice, therefore, lies in what this normalized value represents.
+
+A fundamental distinction can be made between action spaces that define a change in position (buy, sell, hold) and those that define a target position (long, short, cash). While simple, defining an action as the change in position, or the shares to trade $\Delta S_t$ directly, is inefficient. Such a formulation burdens the agent with calculating how many shares are needed to close one position and open another. This is a simple arithmetic task that can be offloaded from the agent, allowing it to focus on the decision of what this target position should be. For this reason we focus on action spaces that define some target position.
+
+\subsubsection{Target shares}
+
+The most basic target position is the target number of shares $S_t$. Here, an action $a_t \in [-1, 1]$ can be mapped to a target number of shares, where $1$ represents a maximum long position and $-1$ represents a maximum short position. However, this approach is not normalized with respect to the asset's price. If the price of the asset were to increase significantly, the same number of shares would represent a much larger capital risk, and vice versa.
+
+\subsubsection{Target positional value}
+
+To resolve this, we can define the action as a factor of the target positional value, $p_{t-1,c}'=S_t \cdot P_{t-1,c}'^*$. The maximum and minimum actions now correspond to fixed cash values, providing a more stable risk definition. Now price is relevant for the action $a_t$ to order $\Delta S_t$ derivation. This is where the difference between decision price $P_{t-1,c}$ and execution price $P_t$ becomes significant. Also, a change in price may cause the account's positional value to exceed the bounds of the action space, causing "holding" shares to not be a possible action in some cases. 
+
+\subsubsection{Target exposure}
+
+For target positional values, the bounds are typically defined as some fixed value. This comes with the side-effect that as equity grows, a smaller percentage of equity will be invested and vice-versa. Suppose then that we use the agent's current equity as a dynamic bound on the maximal positional value. This directly leads us to the target exposure $\epsilon_{t-1,c}'=p_{t-1,c}' / e_{t-1,c}'$. Here, the agent's action $a_t \in [-1, 1]$ directly represents the fraction of its equity to be allocated to the position. This provides natural risk management as the agent will invest more as equity grows, and less as equity decreases.
+
+\subsection{Reward function}
+
+\subsubsection{Profit and Loss}
+
+The most obvious reward measure is the change in equity, or Profit and Loss (PnL), defined as $r_t=e_{t,c}-e_{t-1,c}$. Trivially this reward is goal-aligned, as the total return $G^\text{PnL}_0$ telescopes to the total PnL of the episode:
+$$
+G^\text{PnL}_0=\sum^{T-1}_{t=1}(e_{t,c}-e_{t-1,c}) = e_{T-1,c}-e_{0,c}
+$$
+Given a fixed initial equity $e_{0,c}$, maximizing the total return is mathematically equivalent to the maximizing the final equity $e_{T-1,c}$. When paired with an absolute action space like the target position, the action and reward are also equity-independent, as any action will generate the same PnL regardless of the account's total equity. 
+
+\subsubsection{Return on Equity}
+
+If we were to use target exposures as our action space however, then the absolute PnL scales with equity, violating equity-independence. In an attempt to solve this, we can normalize the reward by the equity aswell, directly leading us to the Return on Equity (ROE):
+$$
+r_t = \frac{e_{t,c} - e_{t-1,c}}{e_{t-1,c}} 
+$$
+
+However, for ROE rewards, maximizing the total sum of rewards (return) is not strictly aligned with maximizing the final equity, violating goal-alignment. A formal proof for this is provided in \cref{sec:roe-misalignment}. 
+
+\subsubsection{Log-equity ratio}
+
+To find a reward function that is both goal-aligned and equity-independent when using target exposures, we must start from the definition of the final equity itself.
+$$
+e_{T-1,c} = e_{0,c} \cdot \prod_{t=1}^{T-1} \left(\frac{e_{t,c}}{e_{t-1,c}}\right)
+$$
+Since the logarithm is a strictly monotonic function, maximizing $e_{T-1,c}$ is equivalent to maximizing $\log(e_{T-1,c})$. Applying the logarithm transforms the product into a sum:
+$$
+\log(e_{T-1,c}) = \log(e_{0,c}) + \sum_{t=1}^{T-1} \log\left(\frac{e_{t,c}}{e_{t-1,c}}\right)
+$$
+We can recognize the right hand side as the total return using some reward function $r_t$, namely the log-equity ratio: 
+$$
+r_t = \log\left(\frac{e_{t,c}}{e_{t-1,c}}\right) = \log(e_{t,c}) - \log(e_{t-1,c})
+$$
+
+The agent's objective, maximizing the sum of these rewards, then becomes directly equivalent to maximizing the log of the final-to-initial equity ratio. Which given that the initial equity $e_{0,c}$ is fixed, is equivalent to maximizing the final equity $e_{T-1,c}$, showing goal-equivalence.
+
+Pairing target exposure actions with a log-equity ratio reward function also meets the equity independence criterion. The target exposure $\epsilon_t$ ensures the absolute size of the position taken is proportional to the agent's equity. Consequently, the resulting Profit and Loss (PnL) from that position will also be proportional to the equity. The reward, $r_t = log(e_{t,c} / e_{t-1,c})$, is the logarithm of the single-period return. This return is equal to $1+\text{PnL}_t/e_{t-1,c}$. Since both the PnL and the equity in the denominator scale linearly with equity, the equity term cancels out, making the return ratio independent of the absolute equity value, demonstrating equity-independence.
+
+\subsection{Additive vs Multiplicative}
+
+Given these derivations, we get the option to choose between an additive, or a multiplicative approach. As shown, both approaches provide goal-alignment and equity-independence, the question remains which properties are desired.
+
+\begin{itemize}
+    \item \textbf{Additive approach}: pairing an absolute action space like the target positional value, with an absolute reward like PnL. This allows for constant risk taking.
+    \item \textbf{Multiplicative approach}: pairing an action space that is relative to equity, like target exposure, with a relative reward, like the log-equity ratio. This adapts risk to capital, and allows for compound interest.
+\end{itemize}  
+
+Up until now we have implicitly assumed that both the equity and prices remain strictly positive. We consider the consequences of relaxing these constraints in \cref{sec:neg-price-equity}. Negative prices turn out to be easy to deal with, but multiplicative approaches struggle with negative equities. 
+
+Another thing to consider is the impact of changes in price on the position. Simply said, the ratio between the target position (positional value or exposure) decided upon at the end of timeframe $t-1$, and the resulting position at the closing price of timeframe $t$. We determine the maximal position-drift in \cref{sec:pos-drift}.
+
+\subsection{Final MDP Specification}
+
+The state $s_t \in \mathcal{S}$ at the end of timeframe $t$ encapsulates the complete history of all prices and account states up to that point. The policy of a Reinforcement Learning agent $\pi(a_t|o_t)$ would operate on an observation $o_t$, which is a feature vector (state representation) that the agent derives from the full state $s_t$. 
+
+Crucially, the state transitions $\mathcal{P}$ are entirely deterministic. Account states are determined using the formulae defined in \cref{sec:problem}, and prices simply follow a fixed series of historical market prices which are not impacted by agent trades (following the zero market impact assumption). Consequently, for any given state $s_t$ and action $a_t$ the next state $s_{t+1}$ can be derived deterministically.
+
+Since the problem only focuses on the maximization of the final equity $e_{T-1,c}$, the discount factor $\gamma$ shall be equal to one $\gamma=1$.
+
+In order to get negative equity using a multiplicative approach, the price must change by more than $100\%$ in a single timeframe, given a 1:1 leverage cap. Since market prices used for this paper do not contain negative prices and are not particularly volatile, we may safely adopt the the multiplicative approach.
+
+This means $a_t\in[-1,1]$ shall directly represent the target exposure $\epsilon_{t-1,c}'$, providing natural risk management, and a 1:1 leverage ratio. The agent receives log-equity rewards $r_t = \log(e_{t,c}/e_{t-1,c})$. We enforce a no-bankruptcy constraint, terminating the episode if equity becomes negative and returning a reward of negative infinity. But given the aforementioned reasons, this constraint likely never needs to be enforced.

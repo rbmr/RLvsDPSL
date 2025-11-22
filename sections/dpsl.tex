@@ -1,0 +1,100 @@
+\section{DP-optimal and Supervised Learning}
+\label{sec:optimal-sl}
+
+\subsection{Definition of Optimal}
+
+The optimal policy, denoted as $\pi^*$, is the policy that maximizes the total return $G_0$. Given the fact that the environment is deterministic, the optimal policy is a sequence of actions that is guaranteed to result in the highest possible final equity. We can define this optimal behavior using the Bellman equations, which recursively relate the value of a state to the values of subsequent states.
+
+Given that the optimal action for a timestep $t$ is equity-independent, then the optimal action relies only on the current timestep $t$ (since it determines the current and future prices), and the decision time exposure $\epsilon_{t-1,c}$. \todo{Explain why} 
+
+% For calculating the reward given an action, suppose equity doesn’t matter (equity-independence), what remains? -> Exposure (Provide reasoning)
+% Idea: just look at the formulae, given a fixed price one can easily convert exposure and equity to cash and shares back and forth. Given that equity doesnt matter. Only exposure remains.
+
+Using this reduction we can define the optimal policy by working backward in time. Let $r_t(\epsilon_, a)$ be the immediate reward for executing action $a \in \mathcal{A}$ in state $(t, \epsilon)$, where $\epsilon$ is some decision-time exposure $\epsilon_{t-1,c}$. Then the optimal action-value function $Q^*_t(\epsilon,a)$, is the return for taking action $a$ in state $(t,\epsilon)$ and following the optimal policy thereafter. 
+$$
+Q^*_t(\epsilon,a) = r_t(\epsilon, a) + \gamma \cdot V^*_{t+1}(\epsilon')
+$$
+Here $\epsilon'$ is the next decision-time exposure $\epsilon_{t,c}$ corresponding to the execution of $a \in \mathcal{A}$ in state $(t, \epsilon)$. The optimal state-value function $V^*_{t}$ is the maximum return achievable from $(t, \epsilon)$. 
+$$
+V_t^*(\epsilon) = \max_{a \in A}{Q^*_t(\epsilon, a)} \quad V_T^*(\epsilon) = 0
+$$
+Finally the optimal policy is to choose the action that maximizes the Q-function at each step:
+$$
+\pi_t^*(\epsilon) = \arg\max_{a \in A}{Q^*_t(\epsilon, a)} 
+$$
+
+\subsection{Computation using Dynamic Programming}
+
+Dynamic programming (DP) is a method for solving complex problems by breaking them down into simpler overlapping subproblems and storing the solutions to avoid recomputation. Following our definition of the trading problem, we can use dynamic programming to approximate the optimal policy and value-functions.
+
+In order to compute the optimal policy and value functions we must be able to compute the immediate reward $r_t(\epsilon, a)$ and the next exposure $\epsilon'$ for any given state $(t,\epsilon)$ and action $a$. The challenge is that we don't have access to the absolute cash and shares. Luckily, since the action-reward pairing is equity independent, we can simulate the trade by assuming a normalized pre-trade equity $e_{t-1,c} = 1$. From this, we derive the corresponding pre-trade positional value $p_{t-1,c} = \epsilon$, cash $C_{t-1} = 1 - \epsilon$, and shares $S_{t-1} = p_{t-1,c} / P_{t-1,c}^*$. The valuation price $P_{t-1,c}^*$ depends on the sign of $\epsilon$. 
+$$
+P_{t-1,c}^* = \begin{cases}
+P^b_{t-1,c}\quad \epsilon \ge 0\\
+P^a_{t-1,c}\quad \text{otherwise}\\
+\end{cases}
+$$
+
+Now we have $S_{t-1}$, and $C_{t-1}$ we can simply use the trading logic defined in \cref{sec:problem} or a derivation thereof to determine the resulting equity $e_{t,c}$ and exposure $\epsilon_{t,c} = \epsilon'$. Since we used a normalized pre-trade equity, the resulting reward simplifies nicely $r_t = \log(e_{t,c} / e_{t-1,c}) = \log(e_{t,c})$. 
+
+Given some sequence of actions $a_1, a_2, \dots, a_{T-1}$ we can already derive the value functions. The issue remains how to find the \textit{optimal} sequence of actions. First we must discretize the action space if it is continuous. A simple and intuitive method is then to just go over all sequences of actions $a_t, a_{t+1}, \dots, a_{T-1}$ for every state $(\epsilon, t)$ and pick the sequence of actions that leads to the maximal return. But this is clearly not computationally feasible. 
+
+This is where dynamic programming comes in. We want to use the recursive nature of the optimal value functions to our advantage. The core challenge is that the exposure $\epsilon$ is continuous. To make the problem tractable, we must discretize both the state and action spaces. We create a grid of $N_\epsilon$ exposures $\mathcal{E}^\text{DP}=\{\epsilon_0,\dots,\epsilon_{N_\epsilon-1}\}$ and $N_a$ actions $\mathcal{A}^{\text{DP}}=\{a_0,\dots,a_{N_a-1}\}$. 
+
+Then we can approximate the optimal value function $V^\text{DP}(t,\epsilon_i)$ in our grid using backward induction.
+\begin{enumerate}
+    \item \textbf{Terminal}: Any state after the final state $t=T-1$ is valued equally. So their value is zero for all exposures $V^\text{DP}_T(\epsilon_i) = 0$ for all $\epsilon_i \in \mathcal{E}^\text{DP}$.
+    \item \textbf{Backwards induction}: We work backward from $t=T-1$ down to $t=0$. For each timestep $t$ and each discrete exposure state $\epsilon_i \in \mathcal{E}^\text{DP}$, we calculate the Q-value for every possible discrete action $a_j \in \mathcal{A}^\text{DP}$.
+    $$
+    Q_t^\text{DP}(\epsilon_i, a_j) = r_t(\epsilon_i, a_j) + V^\text{DP}_{t+1}(\epsilon_i')
+    $$
+    \item \textbf{Interpolate}: The resulting next-state exposure $\epsilon_i'$ from taking action $a_j$ will likely not fall exactly on one of our grid points $\epsilon_k \in \mathcal{E}^\text{DP}$. To find its value, $V^\text{DP}_{t+1}(\epsilon_i')$, we must interpolate using the known values at the neighboring grid points we've already computed for timestep $t+1$ (e.g., using linear interpolation).
+    \item \textbf{Select maximum}: After computing the Q-value for all possible actions, the optimal value for the state $(t, \epsilon_i)$ is the maximum among them:
+    $$
+    V^\text{DP}_t(\epsilon_i) = \max_{a_j \in \mathcal{A}^\text{DP}} Q_t^*(\epsilon_i, a_j)
+    $$
+    \item \textbf{Memoize}: We store this value $V^\text{DP}_t(\epsilon_i)$ and the corresponding best action. 
+    $$
+    \pi^\text{DP}_t(\epsilon_i) = \arg\max_{a_j\in\mathcal{A}^\text{DP}} Q_t^\text{DP}(\epsilon_i, a_j)
+    $$
+\end{enumerate}
+
+By repeating this process until $t=0$, we populate a complete table of optimal values and actions for every point in our discretized state-time grid. This reduces the problem's complexity from exponential to polynomial (approximately $O(T \cdot N_\epsilon \cdot N_a)$), making it computationally feasible. The trade-off for this efficiency is that the resulting policy is an approximation of the true optimal, with the accuracy depending on the granularity of the state-action discretization and the precision of the interpolation method.
+
+\subsection{Determining the difference from true optimal}
+\todo{missing}
+
+% DISTANCE FROM TRUE OPTIMAL: Determine how close DP-optimal is to true optimal by making intensity graph of VDP_0(0) as exposure and action space granularity increases, and a graph  as both increase simultaneously. We use the fact that as granularity goes to infinity, the DP approximation goes to the the actual optimal. If it seems like its converging, then we can derive what it's converging to, and conclude its "close enough". DP OPTIMAL <= OPTIMAL
+
+% LOOKAHEAD: Also make a graph of how the RELATIVE value between states changes as you increase lookahead. n=1 -> next step is terminal, n=2 -> terminal in 2 steps, n=3 -> terminal in 3 steps, etc. This shows the impact of considering future rewards instead of just the maximum immediate rewards as the value function (n=1). 
+
+% INTERPOLATION: Explain effect of the specific interpolation method used. Look at slices of the graph. One interpolated, another using larger spaces.
+
+% ACTION DISCRETIZATION: Explaining discretization of actions: (1) If already discrete: good already we just try all actions. (2) If continuous what can we do? Simple answer is discretize, or maybe we can do some mathematical magic dependent on the reward function used. Here is an attempt to do this: https://g.co/gemini/share/5ea664bdc98d
+
+\subsection{Supervised Learning}
+
+Given our close approximation of the optimal value function, $V^\text{DP}$, and its corresponding action-value function, $Q^\text{DP}$, we can re-frame the reinforcement learning task as a supervised learning problem. The goal is to train a parameterized policy $\pi_\theta(o_t)$, that learns to replicate the optimal decision-making process derived from our dynamic programming solution.
+
+We define the loss for taking an action $a$ in a state defined by $(t, \epsilon)$ as the difference between the value of the optimal action and the value of the action taken:
+$$
+\mathcal{L}_t(\epsilon, a) = V^\text{DP}_t(\epsilon) - Q_t^\text{DP}(\epsilon, a)
+$$
+By definition, this loss function has the desirable property that it is zero for the optimal action $a^* = \pi^\text{DP}_t(\epsilon)$ and strictly positive for any suboptimal action. Minimizing this loss is therefore equivalent to finding the optimal action.
+
+The agent $\pi_\theta$ takes the same observation $o_t$ as may be provided to the RL-agent and outputs an action $a_t = \pi_\theta(o_t)$. The training objective is to adjust the parameters $\theta$ to minimize the loss produced by its chosen action. This objective directly pushes the policy network to output actions that maximize the Q-value for any given state, thus learning the optimal policy $\pi^\text{DP}$. Since $\pi^\text{DP}$ was constructed to maximize the final equity, this supervised objective is perfectly aligned with the original reinforcement learning goal.
+
+This approach draws strong parallels with actor-critic methods. The pre-computed functions $V^\text{DP}$ and $Q^\text{DP}$ serve as a perfect, static oracle critic. The term $Q_t^\text{DP}(\epsilon, a) - V^\text{DP}_t(\epsilon)$ is the advantage of action $a$, and our loss is simply the negative of this advantage. In traditional actor-critic learning, the critic is learned alongside the actor through environmental interaction, which can be unstable and sample-inefficient. Here, the actor ($\pi_\theta$) learns from a fixed, optimal critic, turning the policy improvement step into a deterministic supervised learning problem. This sidesteps the need for exploration and temporal difference learning, leading to a much more stable and direct training process.
+
+\subsection{Risk for overfitting}
+
+\subsubsection{Supervised Learning in a Nutshell}
+
+We are confronted by a possibly infinite series of inputs. The goal is to find a function that maps these inputs to the correct outputs, minimizing some loss function. The problem is, we only have access to the outputs for a subset of the inputs. Therefore we must find a pattern in these inputs that generalizes to unseen data.
+
+The pattern we seek to identify is the signal, which represents the true relationship between (part of) the inputs and (part of) the output. Both the inputs and output may contain noise. For the input, its information that does not have any true relationship with the output, and for the output its information that cannot be predicted using the input. Noise includes measurement errors, and random chance. Output noise can also be a consequence of missing inputs.
+
+Underfitting is when a model is too simple to learn the signal. Overfitting is when a model starts to learn the noise. Either because it finds spurious connections between the noise in the input and the output, or because it contorts itself to perfectly match the irreducible noise present in output. The key problem is to balance underfitting and overfitting. To learn as much of the signal as possible, without accidentally learning the noise.
+
+\subsubsection{Application to DPSL}
+\todo{missing}

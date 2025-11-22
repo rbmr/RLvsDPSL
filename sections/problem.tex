@@ -1,0 +1,55 @@
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Prices}
+
+\subsubsection{Timeframes}
+
+The trading simulation is divided into a finite $T$ timeframes, indexed by $t \in \{0, 1, \dots, T-1\}$. For each timeframe, we are given the Open, High, Low, Close (OHLC) bid/ask prices. To denote the prices we use a subscript for the timeframe $t$, a second subscript for the price type ($o$, $h$, $l$, $c$), and a superscript for the side of the book ($b$ for bid, $a$ for ask). For example, the closing bid price at $t$ is denoted by $P_{t,c}^b$. 
+
+\subsubsection{Orders}
+
+At the end of each timeframe $t-1$, the agent decides some shares to trade $\Delta S_t$. This order will then be executed somewhere during the start of timeframe $t$. We assume zero-market impact, which means the price at which the order is executed is independent of the absolute order size $|\Delta S_t|$. Critically, the agent may only base its decision on historical information, including but not limited to past prices and account states.
+
+\subsubsection{Slippage}
+
+In real trading scenarios the agent will encounter delays. We define this delay as the time between the end of timeframe $t-1$ (decision time), and the time at which the corresponding order $\Delta S_t$  would be executed (execution time). During this delay the price may also change. We say the decision price $P_{t-1,c}$ is the price the trade would be executed at if there was no delay, and the execution price $P_t$ is the actual price the trade would be executed at. Then slippage may be defined as the difference between the execution and the decision price.
+
+The decision price $P_{t-1,c}$ is known when deciding on $\Delta S_t$, the execution price $P_t$ is not. The execution price may be estimated through various methods. For this paper, the execution price is derived by assuming a constant delay and retrieving the execution price from tick data. Alternative methods include using the opening price $P_{t,o}$ or assuming worst case slippage. 
+
+\subsection{Account state}
+
+$C_t$, and $S_t$ denote the cash and shares of the account between the execution of $\Delta S_t$ and $\Delta S_{t+1}$. Using the account state and prices, we can determine state-price derivatives as described in \cref{tab:state_price_derivatives}. 
+
+\begin{table}[h!]
+    \centering
+    \begin{threeparttable}
+        \caption{State Price Derivatives}
+        \label{tab:state_price_derivatives} 
+        \begin{tabular}{ll}
+            \toprule
+            \textbf{Term} & \textbf{Formula} \\
+            \midrule
+            Valuation price & $P^*_t =\begin{cases} P^{\text{b}}_t & S_t \ge 0\\ P^{\text{a}}_t & \text{otherwise}\end{cases}$ \\
+            Positional value & $p_t = S_t \cdot P^*_t$ \\
+            Equity & $e_t = C_t + p_t$ \\
+            Exposure & $\epsilon_t = p_t / e_t$ \\
+            \bottomrule
+        \end{tabular}
+        \begin{tablenotes}
+            \item $X_t'$ denotes some state-price derivative $X$ relative to the next state $C_{t+1}$, $S_{t+1}$ instead of the current state $C_t$, $S_t$.
+        \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+
+Initial capital is cash only $S_0=0$, $C_0=e_0$. For each step, the updated shares is given by $S_t = S_{t-1} + \Delta S_t$ and the updated cash is given by $C_t = C_{t-1} - \Delta S_t \cdot \varphi_t$ where $\varphi_t$ are the costs per share traded taking commission percentage $k \in[0,1]$ and bid-ask spread into account.
+$$
+\varphi_t=\begin{cases}
+  (1+k)\cdot P_t^\text{ask} & \text{if } \Delta S_t \ge 0 \\
+  (1-k)\cdot P_t^\text{bid} & \text{otherwise}
+\end{cases}
+$$
+
+\subsubsection{Goal} 
+\label{sec:goal}
+The goal is to develop an agent capable of deciding on a sequence orders $\Delta S_1, \Delta S_2, \dots, \Delta S_{T-1}$, that maximizes the expected final equity $e_{T-1,c}$ given some arbitrary initial equity $e_0$, on unseen data.

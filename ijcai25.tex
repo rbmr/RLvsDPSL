@@ -1,0 +1,81 @@
+%%%% ijcai25.tex
+
+\typeout{IJCAI--25 Instructions for Authors}
+
+\documentclass{article}
+\pdfpagewidth=8.5in
+\pdfpageheight=11in
+
+\usepackage{ijcai25}
+
+\usepackage{times}
+\usepackage{soul}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage[small]{caption}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage[switch]{lineno}
+\usepackage{latexsym}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{cleveref}
+\usepackage{threeparttable}
+\usepackage{svg}
+
+% \linenumbers
+
+\urlstyle{same}
+
+\newtheorem{example}{Example}
+\newtheorem{theorem}{Theorem}
+
+\pdfinfo{
+/TemplateVersion (IJCAI.2025.0)
+}
+
+\title{Dynamic Programming Supervised Learning in Intraday Trading}
+
+\author{
+Robert Mertens$^1$ \And
+Finn van Oosterhout$^2$\\
+\affiliations
+$^1$First Affiliation\\
+$^2$Second Affiliation\\
+\emails
+mertensrh@gmail.com,
+finn.oosterhoutje@gmail.com
+}
+
+\newcommand{\todo}[1]{{\color{red}\textbf{TODO: #1}}}
+
+\begin{document}
+
+\maketitle
+
+\input{sections/abstract}
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/problem}
+\input{sections/mdp}
+\input{sections/dpsl}
+\input{sections/methodology}
+\input{sections/experiment}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{named}
+\bibliography{ijcai25}
+
+\appendix
+
+\input{sections/appendix}
+
+\end{document}
+

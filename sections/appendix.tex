@@ -1,0 +1,151 @@
+\section{ROE goal-alignment counter-example}
+\label{sec:roe-misalignment}
+
+We show maximizing the sum of ROE is not the same as maximizing the final equity by providing a counter example. 
+
+Suppose we have two policies $\pi^A$ and $\pi^B$. $\pi^A$ follows a high volatility strategy experiencing a large loss of $-50\%$ followed by a large gain of $90\%$. Policy $\pi^B$ follows a lower volatility strategy experiencing a smaller loss of $-10\%$ followed by a gain of $10\%$. The total return $G_0^\text{ROE}$ and the final equity $e_{T-1,c}$ for both policies are then compared in \cref{tab:roe-counterexample}.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{lll}
+        \toprule
+        & $G_0^\text{ROE}$ & $e_{T-1,c}$ \\
+        \midrule
+        $\pi^A$ & $-0.5 + 0.9 = 0.4 $ & $\$95$ \\
+        $\pi^B$ & $-0.1 + 0.1 = 0.0$ & $\$99$ \\
+        Winner & $\pi^A$ & $\pi^B$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{ROE Goal-Misalignment Counterexample}
+    \label{tab:roe-counterexample}
+\end{table}
+
+As shown in the table, $\pi^A$ has a higher return ($G_0^A > G_0^B$), but $\pi^B$ results in a higher final equity ($e_{T-1,c}^B > e_{T-1,c}^A$). This directly contradicts the condition for goal-alignment ($G_0^A > G_0^B \iff e_{T-1,c}^A > e_{T-1,c}^B$). The discrepancy arises because the sum of simple returns (ROE) does not correctly account for the compounding nature of equity growth. A large percentage gain on a diminished capital base, as seen in Policy A, can misleadingly inflate the total return.
+
+\section{Action to order derivation}
+\label{sec:action-to-order}
+
+\subsection{Target Positional Value}
+The shares to trade $\Delta S_t$ is derived such that, given a decision price $P_{t-1,c}$ and a commission percentage $k \in [0, 1]$, the positional value after the trade $p_{t-1,c}'$ (if it were to be executed without delay at the decision price) is exactly the target positional value $a_t$ times some normalization factor $N$.
+
+\todo{Provide this derivation}
+
+\subsection{Target Exposure}
+The shares to trade $\Delta S_t$ is derived such that, given a decision price $P_{t-1,c}$ and a commission percentage $k \in [0, 1]$, the exposure after the trade $\epsilon_{t-1,c}'$ (if it were to be executed without delay at the decision price) is exactly the target exposure $a_t$.
+
+Given $a_t = \epsilon_{t-1,c}'$ we solve for $\Delta S_t$. First, we try to define $a_t$ in known terms. Trivially, $S_t = S_{t-1} + \Delta S_t$, so the post-trade positional value can be determined by $p_{t-1,c}' = S_t \cdot P_{t-1,c}'^*=(S_{t-1} + \Delta S_t)P_{t-1,c}'^*$. The cash after the trade is dependent on the price $C_{t-1,c}'=C_{t-1}-\Delta S_t\cdot \varphi_{t-1,c}'$. Substituting $C_{t-1,c}'$ and $p_{t-1,c}'$ in the formula for $a_t$, and separating out $\Delta S_t$ gives the following equation:
+$$
+\Delta S_t = \frac{a_t C_{t-1} - S_{t-1}P_{t-1,c}'^* (1-a_t)}{P_{t-1,c}'^*(1-a_t) + a_t \varphi_{t-1,c}'}
+$$
+
+This is close, but we still need to factor out $\Delta S_t$ from the formulae for $P_{t-1,c}'^*$ and $\varphi_{t-1,c}'$. Intuitively, the following two properties hold: (1) $a_t \ge \epsilon_{t-1,c} \iff \Delta S_t \ge 0$, and (2) $a_t \ge 0 \iff S_t \ge 0$. \todo{Provide these proofs}. 
+
+Given these properties, we can define $P_{t-1,c}'^*$ and $\varphi_{t-1,c}'$ using variables known at decision time as follows:
+\begin{align*}
+P_{t-1,c}'^* &= \begin{cases} 
+P_{t-1,c}^b & \text{if } a_t \ge 0 \\ 
+P_{t-1,c}^a & \text{otherwise} 
+\end{cases} \\
+\varphi_{t-1,c}' &= \begin{cases} 
+(1+k) \cdot P_{t-1,c}^a & \text{if } a_t \ge \epsilon_{t-1,c} \\ 
+(1-k) \cdot P_{t-1,c}^b & \text{otherwise} 
+\end{cases}
+\end{align*}
+
+This completes our derivation of the trade size $\Delta S_t$, such that $a_t = \epsilon_{t-1,c}'$ using only information available at decision-time.
+
+
+\section{Impact of non-positive Prices and Equity}
+\label{sec:neg-price-equity}
+
+We must also consider edge cases, particularly negative equity and negative prices. Crossing zero equity causes the log-equity ratio to break down, first by being undefined, and then (when previous and current equity are both negative) by giving larger rewards when the current equity is MORE negative. PnL does not have this side-effect. On top of this the target exposure flips direction when equity is negative, making positive actions a short position and negative actions a long position. This is quite easily mitigated by normalizing by the absolute equity instead of the signed equity. 
+
+It makes sense that as equity continues to decrease that one takes on less risk, but with the target exposure, as equity continues to decrease past zero the agent starts taking on more risk again. A solution for this is to add a "lower bound" for the normalizing equity. One can view this as using a multiplicative approach as long as the equity remains above some threshold, but if it drops below you move over to an additive approach. This still allows the agent to benefit from compound interest, but comes with additional complexity. 
+
+For both the absolute and relative approaches negative price leads to the same long-short flipping. This can easily be mitigated by using the absolute price in the action formulation.
+
+\section{Derivation of latency}
+
+We defined the delay as the time between timeframe $t-1$ and the execution of the corresponding order. In order to accurately assess the duration of this delay we divide it into separate steps, starting from the moment timeframe $t-1$ ends.
+
+\begin{enumerate}
+    \item SERVER: Generation and publication of candle.
+    \item SERVER $\to$ CLIENT: Retrieval of candle
+    \item CLIENT: Generation of features (observation) for agent
+    \item CLIENT: Generation of action given features
+    \item CLIENT: Conversion of action to order
+    \item CLIENT $\to$ SERVER: Sending order to server, placing of order in queue.
+    \item SERVER: Execution of order
+\end{enumerate}
+
+The duration of each of these steps varies greatly. \todo{Explain reasonable latency for our scenario.}
+
+\section{Position Drift}
+\label{sec:pos-drift}
+\subsection{Target Positional Value}
+\todo{Write this section}
+
+\subsection{Target Exposure}
+\todo{Write this section}
+
+\section{Cheatsheet}
+
+\begin{figure*}[t!]
+    \centering
+    \includesvg[width=0.95\textwidth]{media/price_graph.svg} 
+    \caption{A diagram showing the OHLC and execution prices for some generated tick data.}
+    \label{fig:trading_diagram}
+\end{figure*}
+
+\begin{table*}[t!]
+    \centering
+    \label{tab:cheatsheet}
+    \begin{tabular}{p{0.2\linewidth} p{0.35\linewidth} p{0.35\linewidth}}
+        \toprule
+        \textbf{Term} & \textbf{Base Formula} & \textbf{Prime Variant ($X_t'$)} \\
+        \midrule
+        
+        Valuation Price & 
+        $P^*_t = \begin{cases} P^{\text{b}}_t & \text{if } S_t \ge 0 \\ P^{\text{a}}_t & \text{otherwise} \end{cases}$ &
+        $P'^*_t = \begin{cases} P^{\text{b}}_t & \text{if } S_{t+1} \ge 0 \\ P^{\text{a}}_t & \text{otherwise} \end{cases}$ \\
+        
+        \addlinespace[0.5em]
+        
+        Positional Value & 
+        $p_t = S_t \cdot P^*_t$ &
+        $p'_t = S_{t+1} \cdot P'^*_t$ \\
+
+        \addlinespace[0.5em]
+
+        Equity & 
+        $e_t = C_t + p_t$ &
+        $e'_t = C_{t+1} + p'_t$ \\
+
+        \addlinespace[0.5em]
+
+        Exposure & 
+        $\epsilon_t = p_t / e_t$ &
+        $\epsilon'_t = p'_t / e'_t$ \\
+
+        \midrule
+
+        Cost per share & 
+        $\varphi_t = \begin{cases} (1+k) \cdot P_t^\text{a} & \text{if } \Delta S_t \ge 0 \\ (1-k) \cdot P_t^\text{b} & \text{otherwise} \end{cases}$ &
+        $\varphi_t' = \begin{cases} (1+k) \cdot P_t^\text{a} & \text{if } \Delta S_{t+1} \ge 0 \\ (1-k) \cdot P_t^\text{b} & \text{otherwise} \end{cases}$ \\
+
+        \addlinespace[0.5em]
+
+        Updated Shares & 
+        $S_t = S_{t-1} + \Delta S_t$ &
+        $S_t' = S_t + \Delta S_{t+1}$ \\
+        
+        \addlinespace[0.5em]
+        
+        Updated Cash & 
+        $C_t = C_{t-1} - \Delta S_t \cdot \varphi_t$ &
+        $C'_t = C_t - \Delta S_{t+1} \cdot \varphi'_t$ \\
+
+        \bottomrule
+    \end{tabular}
+    \caption{Cheat Sheet: State-Price Derivatives \& Update Equations}
+\end{table*}
