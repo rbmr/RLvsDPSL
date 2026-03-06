@@ -9,3 +9,7 @@ The idea then became to compare the performance of this DPSL technique with the 
 Since I still really like the idea of being able to find the perfect trading strategy, under the assumptions of zero market impact, and perfect lookahead, and using this to train trading models, I am publishing this unfinished work here.
 
 The code I wrote for implementing and testing the DPSL approach is available here: https://github.com/rbmr/SupervisedFX
+
+## Read the Paper
+
+You can read the final (yet unfinished) version of the paper here: [RLvsDPSL.pdf](./RLvsDPSL.pdf)
